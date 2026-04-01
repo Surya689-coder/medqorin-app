@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEDQORIN — Automated Medicine Allocator</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#1A6FE8;--primary-dark:#0D4FB5;--accent:#00C897;--accent-dark:#00A07A;
+  --danger:#E24B4A;--warn:#EF9F27;--bg:#F0F4FA;--surface:#FFFFFF;
+  --text:#1A2033;--text2:#5A6478;--text3:#9AA3B2;--border:#E2E8F0;
+  --radius:12px;--radius-sm:8px;--shadow:0 2px 12px rgba(26,111,232,0.08);
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+h1,h2,h3,h4{font-family:'Syne',sans-serif;font-weight:700}
+
+/* ── NAV ── */
+.nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:64px}
+.nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--primary),var(--accent));border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Syne',sans-serif;font-weight:800;font-size:14px}
+.logo-text{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px}
+.logo-sub{font-size:10px;color:var(--text2);letter-spacing:1.5px;text-transform:uppercase}
+.nav-tabs{display:flex;gap:4px}
+.nav-tab{padding:6px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--text2);transition:all .2s;font-family:'DM Sans',sans-serif}
+.nav-tab:hover{background:var(--bg);color:var(--text)}
+.nav-tab.active{background:var(--primary);color:#fff}
+.nav-actions{display:flex;gap:8px;align-items:center}
+.user-pill{font-size:12px;color:var(--text2);font-weight:500;padding:4px 10px;background:var(--bg);border-radius:20px}
+
+/* ── BUTTONS ── */
+.btn{padding:8px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .2s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
+.btn-outline{background:transparent;color:var(--primary);border:1.5px solid var(--primary)}.btn-outline:hover{background:var(--primary);color:#fff}
+.btn-accent{background:var(--accent);color:#fff}.btn-accent:hover{background:var(--accent-dark)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-lg{padding:14px 32px;font-size:15px;border-radius:var(--radius)}
+.btn-block{width:100%;justify-content:center;padding:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── PAGES ── */
+.page{display:none;min-height:calc(100vh - 64px);animation:fadeIn .3s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── FORM ── */
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:var(--text)}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font-size:14px;color:var(--text);outline:none;transition:border .2s;font-family:'DM Sans',sans-serif;background:white}
+.form-group input:focus,.form-group select:focus{border-color:var(--primary)}
+.form-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+/* ── CARD ── */
+.card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:24px}
+.card-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+
+/* ── PILL ── */
+.pill{display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.pill.green{background:#E6F9F2;color:#00614B}.pill.orange{background:#FFF5E6;color:#7A4A00}
+.pill.blue{background:#E8F3FF;color:var(--primary-dark)}.pill.red{background:#FEECEC;color:#8B1F1F}
+
+/* ── TOGGLE ── */
+.toggle{width:44px;height:24px;background:var(--accent);border-radius:12px;position:relative;cursor:pointer;flex-shrink:0}
+.toggle::after{content:'';position:absolute;top:2px;right:2px;width:20px;height:20px;background:white;border-radius:50%;transition:.2s}
+.toggle.off{background:var(--border)}.toggle.off::after{right:auto;left:2px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;right:24px;background:#1A2033;color:white;padding:14px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;z-index:9999;transform:translateX(140%);transition:transform .3s;display:flex;align-items:center;gap:10px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast.show{transform:translateX(0)}
+
+/* ── LOADER ── */
+.loader-overlay{position:fixed;inset:0;background:rgba(255,255,255,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9998;gap:16px}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-overlay.hidden{display:none}
+
+/* ── AUTH ── */
+.auth-wrap{min-height:calc(100vh - 64px);display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#EAF1FF,#E6F9F2);padding:2rem}
+.auth-card{background:white;border-radius:20px;padding:40px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(26,111,232,.12)}
+.auth-logo{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:28px}
+.google-btn,.otp-btn{width:100%;padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:white;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;font-size:14px;font-weight:500;color:var(--text);margin-bottom:10px;transition:all .2s;font-family:'DM Sans',sans-serif}
+.google-btn:hover,.otp-btn:hover{border-color:var(--primary);background:#F8FAFF}
+.divider{display:flex;align-items:center;gap:12px;margin:16px 0}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.divider span{font-size:12px;color:var(--text3)}
+.role-select{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
+.role-opt{padding:10px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border);text-align:center;cursor:pointer;font-size:12px;font-weight:500;transition:all .2s;color:var(--text2)}
+.role-opt.selected{border-color:var(--primary);background:#E8F3FF;color:var(--primary)}
+.auth-switch{text-align:center;margin-top:18px;font-size:13px;color:var(--text2)}
+.auth-switch a{color:var(--primary);cursor:pointer;font-weight:600}
+.otp-inputs{display:flex;gap:8px;justify-content:center;margin:16px 0}
+.otp-inputs input{width:44px;height:44px;text-align:center;font-size:20px;font-weight:700;border:1.5px solid var(--border);border-radius:var(--radius-sm);outline:none;font-family:'Syne',sans-serif}
+.otp-inputs input:focus{border-color:var(--primary)}
+.pw-toggle{position:relative}
+.pw-toggle input{padding-right:40px}
+.pw-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text3);font-size:16px;user-select:none}
+
+/* ── HERO ── */
+.hero{background:linear-gradient(135deg,#EAF1FF,#E6F9F2);padding:80px 2rem;overflow:hidden;position:relative}
+.hero::before{content:'';position:absolute;top:-60px;right:-60px;width:400px;height:400px;background:radial-gradient(circle,rgba(26,111,232,.07),transparent 70%);border-radius:50%}
+.hero-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:#E8F3FF;color:var(--primary);padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:20px}
+.pulse{width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+.hero h1{font-size:48px;line-height:1.1;margin-bottom:20px;letter-spacing:-1px}
+.hero h1 span{color:var(--primary)}
+.hero p{font-size:17px;color:var(--text2);line-height:1.7;margin-bottom:32px}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap}
+.hero-device{background:white;border-radius:24px;padding:24px;box-shadow:0 20px 60px rgba(26,111,232,.15)}
+.compartments{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px}
+.comp{height:52px;border-radius:var(--radius-sm);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:600;gap:3px}
+.comp.filled{background:#E8F3FF;color:var(--primary)}
+.comp.low{background:#FFF5E6;color:var(--warn)}
+.comp.empty{background:var(--bg);color:var(--text3)}
+.comp-label{font-size:9px;opacity:.7}
+.next-dose-bar{background:linear-gradient(135deg,var(--primary),var(--accent));border-radius:var(--radius);padding:16px;color:white;display:flex;align-items:center;justify-content:space-between}
+.status-badge{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--accent);font-weight:600}
+.status-dot{width:7px;height:7px;background:var(--accent);border-radius:50%;animation:pulse 1.5s infinite}
+
+/* ── FEATURES ── */
+.features{padding:80px 2rem;max-width:1100px;margin:0 auto}
+.section-label{font-size:12px;font-weight:600;color:var(--primary);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px}
+.section-title{font-size:36px;margin-bottom:48px;max-width:500px}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.feat-card{background:var(--surface);border-radius:var(--radius);padding:28px;border:1px solid var(--border);transition:all .2s}
+.feat-card:hover{box-shadow:var(--shadow);transform:translateY(-2px)}
+.feat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px}
+.feat-icon.blue{background:#E8F3FF}.feat-icon.green{background:#E6F9F2}.feat-icon.orange{background:#FFF5E6}
+.feat-icon.red{background:#FEECEC}.feat-icon.purple{background:#F0ECFF}.feat-icon.teal{background:#E0F9F5}
+.feat-card h3{font-size:16px;margin-bottom:8px}
+.feat-card p{font-size:13px;color:var(--text2);line-height:1.6}
+
+/* ── DASHBOARD ── */
+.dash-wrap{padding:32px 2rem;max-width:1200px;margin:0 auto}
+.dash-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px}
+.dash-greeting{font-size:26px}
+.dash-greeting span{color:var(--primary)}
+.dash-date{font-size:13px;color:var(--text2);margin-top:4px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+.stat-card{background:var(--surface);border-radius:var(--radius);padding:20px;border:1px solid var(--border)}
+.stat-card .lbl{font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:500}
+.stat-card .val{font-size:28px;font-weight:700;font-family:'Syne',sans-serif}
+.stat-card .sub{font-size:12px;color:var(--text3);margin-top:4px}
+.stat-card.bl{border-left:3px solid var(--primary)}
+.stat-card.gr{border-left:3px solid var(--accent)}
+.stat-card.or{border-left:3px solid var(--warn)}
+.stat-card.rd{border-left:3px solid var(--danger)}
+.dash-main{display:grid;grid-template-columns:1fr 340px;gap:20px}
+.med-item{display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg);border-radius:var(--radius-sm);transition:all .2s}
+.med-item:hover{background:#E8F3FF}
+.med-item+.med-item{margin-top:8px}
+.med-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.med-icon.blue{background:#E8F3FF}.med-icon.green{background:#E6F9F2}.med-icon.orange{background:#FFF5E6}
+.med-info{flex:1}
+.med-name{font-size:14px;font-weight:600}
+.med-detail{font-size:12px;color:var(--text2)}
+.med-time{font-size:13px;font-weight:600;color:var(--text2)}
+.med-chk{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px}
+.med-chk.done{background:#E6F9F2;color:var(--accent)}
+.med-chk.pending{background:var(--bg);border:2px solid var(--border)}
+.alert-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);font-size:13px}
+.alert-item+.alert-item{margin-top:6px}
+.alert-item.info{background:#E8F3FF;color:#0D4FB5}
+.alert-item.warn{background:#FFF5E6;color:#7A4A00}
+.alert-item.success{background:#E6F9F2;color:#00614B}
+.mini-comps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}
+.mini-comp{height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;text-align:center;line-height:1.3}
+.mini-comp.f{background:#E8F3FF;color:var(--primary)}
+.mini-comp.l{background:#FFF5E6;color:var(--warn)}
+.mini-comp.e{background:var(--bg);color:var(--text3)}
+.dispense-btn{width:100%;padding:16px;background:linear-gradient(135deg,var(--primary),var(--accent));color:white;border:none;border-radius:var(--radius);font-size:15px;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif;transition:all .2s;margin-top:8px}
+.dispense-btn:hover{opacity:.9}
+.bar-wrap{display:flex;align-items:flex-end;gap:8px;height:120px;padding:0 4px}
+.bar-grp{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar{width:100%;border-radius:4px 4px 0 0;transition:height .3s;min-height:4px}
+.bar-lbl{font-size:11px;color:var(--text3)}
+.dev-status-row{display:flex;align-items:center;gap:10px;padding:14px;background:linear-gradient(135deg,#E8F3FF,#E6F9F2);border-radius:var(--radius-sm)}
+
+/* ── MEDICATIONS PAGE ── */
+.mgmt-wrap{padding:32px 2rem;max-width:1100px;margin:0 auto}
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px}
+.page-title{font-size:26px}
+.med-table{width:100%;border-collapse:collapse}
+.med-table th{background:var(--bg);padding:12px 16px;font-size:12px;font-weight:600;color:var(--text2);text-align:left;letter-spacing:.5px;text-transform:uppercase}
+.med-table td{padding:14px 16px;border-bottom:1px solid var(--border);font-size:14px}
+.med-table tr:hover td{background:var(--bg)}
+
+/* ── DEVICE PAGE ── */
+.dev-wrap{padding:32px 2rem;max-width:1100px;margin:0 auto}
+.dev-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+.dev-visual{background:linear-gradient(135deg,#1A2033,#2A3A5E);border-radius:20px;padding:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:320px;position:relative;overflow:hidden}
+.dev-visual::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 30%,rgba(26,111,232,.3),transparent 60%)}
+.dev-body{width:160px;height:200px;background:linear-gradient(180deg,#2A4A8A,#1A3060);border-radius:20px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.dev-screen{width:100px;height:60px;background:#0D1B3E;border-radius:8px;margin:16px auto;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:11px;color:#00C897;font-weight:700;text-align:center}
+.dev-slots{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:0 12px;margin-bottom:12px}
+.slot{height:24px;border-radius:4px;background:rgba(255,255,255,.1)}
+.slot.on{background:rgba(0,200,151,.4)}
+.dev-ind{width:12px;height:12px;border-radius:50%;background:var(--accent);position:absolute;bottom:16px;right:16px;box-shadow:0 0 12px var(--accent);animation:pulse 1.5s infinite}
+.dev-name{color:white;font-family:'Syne',sans-serif;font-size:20px;font-weight:700;margin-top:24px}
+.dev-sub{color:rgba(255,255,255,.5);font-size:12px;margin-top:4px}
+.ctrl-panel{display:flex;flex-direction:column;gap:16px}
+.ctrl-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:20px}
+.ctrl-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.ctrl-row:last-child{border-bottom:none}
+.ctrl-lbl{font-size:13px;color:var(--text2)}
+.prog-bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin-top:8px}
+.prog-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--primary),var(--accent))}
+
+/* ── HISTORY PAGE ── */
+.hist-wrap{padding:32px 2rem;max-width:1100px;margin:0 auto}
+.hist-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.log-entry{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.log-entry:last-child{border-bottom:none}
+.log-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.log-info{flex:1}
+.log-name{font-size:13px;font-weight:600}
+.log-time{font-size:12px;color:var(--text3)}
+.log-status{font-size:12px;font-weight:600}
+.empty-state{text-align:center;padding:48px 20px;color:var(--text3)}
+.empty-state .icon{font-size:40px;margin-bottom:12px}
+.empty-state p{font-size:14px}
+
+/* ── SHOP ── */
+.shop-wrap{padding:32px 2rem;max-width:1100px;margin:0 auto}
+.shop-layout{display:grid;grid-template-columns:1fr 320px;gap:24px}
+.prod-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
+.prod-card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;transition:all .2s}
+.prod-card:hover{box-shadow:0 8px 32px rgba(26,111,232,.12);transform:translateY(-3px)}
+.prod-card.featured{border:2px solid var(--primary)}
+.prod-img{height:200px;display:flex;align-items:center;justify-content:center;font-size:64px;position:relative}
+.prod-img.light{background:linear-gradient(135deg,#EAF1FF,#E6F9F2)}
+.prod-img.dark{background:linear-gradient(135deg,#1A2033,#2A3A5E)}
+.best-badge{position:absolute;top:12px;right:12px;background:var(--primary);color:white;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px}
+.prod-body{padding:20px}
+.prod-name{font-size:18px;font-weight:700;margin-bottom:6px}
+.prod-desc{font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:16px}
+.prod-price{font-size:28px;font-weight:800;color:var(--primary);font-family:'Syne',sans-serif;margin-bottom:16px}
+.prod-price span{font-size:14px;color:var(--text3);font-family:'DM Sans',sans-serif;font-weight:400}
+.color-dots{display:flex;gap:8px;margin:8px 0 12px}
+.cdot{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.cdot.sel{border-color:var(--text);transform:scale(1.2)}
+.cart-panel{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:24px;position:sticky;top:80px}
+.cart-item-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.cart-total-row{display:flex;justify-content:space-between;padding-top:14px;font-weight:700;font-size:16px}
+
+/* ── PROFILE ── */
+.prof-wrap{padding:32px 2rem;max-width:900px;margin:0 auto}
+.prof-hero{background:linear-gradient(135deg,var(--primary),var(--accent));border-radius:var(--radius);padding:32px;color:white;display:flex;align-items:center;gap:24px;margin-bottom:24px;flex-wrap:wrap}
+.avatar{width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:32px;font-family:'Syne',sans-serif;font-weight:700;flex-shrink:0}
+.prof-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.prof-section{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:24px}
+.prof-section h3{font-size:15px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.prof-field{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.prof-field:last-child{border-bottom:none}
+.fld-lbl{color:var(--text2)}
+.fld-val{font-weight:500}
+
+/* ── SETTINGS ── */
+.sett-wrap{padding:32px 2rem;max-width:900px;margin:0 auto}
+.sett-section{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:24px;margin-bottom:20px}
+.sett-section h3{font-size:15px;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.sett-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.sett-row:last-child{border-bottom:none}
+.sett-lbl{font-size:14px;font-weight:500}
+.sett-desc{font-size:12px;color:var(--text2);margin-top:2px}
+
+/* ── CAREGIVER ── */
+.care-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.pat-card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:20px}
+.pat-hdr{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.pat-avatar{width:44px;height:44px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:20px}
+.compliance-bar{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin:8px 0}
+.comp-fill{height:100%;border-radius:3px;background:var(--accent)}
+.comp-fill.warn{background:var(--warn)}
+
+/* ── FOUNDER ── */
+.founder-sec{background:linear-gradient(135deg,#1A2033,#2A3A5E);padding:60px 2rem}
+.founder-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+.founder-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:var(--radius);padding:28px}
+.founder-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;font-size:28px;font-family:'Syne',sans-serif;font-weight:700;color:white;margin-bottom:16px}
+.contact-item{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,.7);margin-bottom:10px}
+.contact-icon{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+
+/* ── FOOTER ── */
+.footer{background:white;border-top:1px solid var(--border);padding:20px 2rem;text-align:center;font-size:12px;color:var(--text3)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .hero-inner,.dash-main,.dev-grid,.hist-grid,.shop-layout,.prod-grid,.prof-grid,.founder-inner,.care-grid{grid-template-columns:1fr}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .features-grid,.form-row{grid-template-columns:1fr}
+  .nav-tabs{display:none}
+  .hero h1{font-size:32px}
+}
+
+/* ── OTP STEPS ── */
+.otp-step{display:none}.otp-step.active{display:block}
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div class="loader-overlay" id="globalLoader">
+  <div class="spinner"></div>
+  <div style="font-size:14px;color:var(--text2);font-family:'DM Sans',sans-serif">Loading MEDQORIN...</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"><span id="toastMsg"></span></div>
+
+<!-- ── NAV ── -->
+<nav class="nav" id="mainNav" style="display:none">
+  <div class="nav-logo" onclick="showPage('landing')">
+    <div class="logo-icon">MQ</div>
+    <div>
+      <div class="logo-text">MEDQORIN</div>
+      <div class="logo-sub">AMA Platform</div>
+    </div>
+  </div>
+  <div class="nav-tabs" id="navTabs"></div>
+  <div class="nav-actions">
+    <div class="user-pill" id="userPill"></div>
+    <button class="btn btn-outline" onclick="doLogout()">Logout</button>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════
+     LANDING PAGE
+══════════════════════════════════════ -->
+<div class="page" id="page-landing">
+  <div class="hero">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-badge"><div class="pulse"></div> IoT-Powered Healthcare</div>
+        <h1>Smart Medicine<br>Dispensing for<br><span>Modern Life</span></h1>
+        <p>MEDQORIN's Automated Medicine Allocator (AMA) ensures you never miss a dose. Secure, smart, and connected.</p>
+        <div class="hero-cta">
+          <button class="btn btn-primary btn-lg" onclick="showPage('shop')">🛒 Buy AMA Device</button>
+          <button class="btn btn-outline btn-lg" onclick="showPage('login')">Get Started Free</button>
+        </div>
+      </div>
+      <div class="hero-device">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px">AMA Device — Live</div>
+          <div class="status-badge"><div class="status-dot"></div> Connected</div>
+        </div>
+        <div class="compartments">
+          <div class="comp filled"><span>💊</span><span class="comp-label">A1</span><span>85%</span></div>
+          <div class="comp filled"><span>💊</span><span class="comp-label">A2</span><span>70%</span></div>
+          <div class="comp low"><span>⚠️</span><span class="comp-label">A3</span><span>20%</span></div>
+          <div class="comp filled"><span>💊</span><span class="comp-label">A4</span><span>90%</span></div>
+          <div class="comp empty"><span>—</span><span class="comp-label">B1</span><span>—</span></div>
+          <div class="comp filled"><span>💊</span><span class="comp-label">B2</span><span>60%</span></div>
+          <div class="comp filled"><span>💊</span><span class="comp-label">B3</span><span>45%</span></div>
+          <div class="comp empty"><span>—</span><span class="comp-label">B4</span><span>—</span></div>
+        </div>
+        <div class="next-dose-bar">
+          <div><div style="font-size:11px;opacity:.8;margin-bottom:4px">Next Dose</div><div style="font-size:18px;font-weight:700;font-family:'Syne',sans-serif">Metformin 500mg</div></div>
+          <div style="text-align:right"><div style="font-size:28px;font-weight:800;font-family:'Syne',sans-serif" id="heroTimer">02:34</div><div style="font-size:10px;opacity:.7">remaining</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="features">
+    <div class="section-label">Why MEDQORIN</div>
+    <div class="section-title">Everything you need for smarter medication management</div>
+    <div class="features-grid">
+      <div class="feat-card"><div class="feat-icon blue">🔒</div><h3>Gesture Authentication</h3><p>Only authorized users access medicine — biometric gesture system ensures secure dispensing every time.</p></div>
+      <div class="feat-card"><div class="feat-icon green">📡</div><h3>Real-time IoT Sync</h3><p>Arduino/ESP32-powered AMA syncs live with the app — device status, refill levels, and dispense events instantly.</p></div>
+      <div class="feat-card"><div class="feat-icon orange">⏰</div><h3>Smart Reminders</h3><p>Time-based alerts, voice reminders, and push notifications ensure you never miss a critical dose.</p></div>
+      <div class="feat-card"><div class="feat-icon red">🚨</div><h3>Caregiver Alerts</h3><p>Family or doctors receive instant notifications for missed doses, low medicine levels, or unusual activity.</p></div>
+      <div class="feat-card"><div class="feat-icon purple">📊</div><h3>Detailed Reports</h3><p>Weekly and monthly adherence reports with downloadable logs — perfect for doctor visits.</p></div>
+      <div class="feat-card"><div class="feat-icon teal">🤖</div><h3>AI Suggestions</h3><p>Future-ready AI engine analyzes your patterns and suggests optimal dosing schedules.</p></div>
+    </div>
+  </div>
+  <div class="founder-sec">
+    <div class="founder-inner">
+      <div>
+        <h2 style="color:white;font-size:32px;margin-bottom:12px">Built with purpose,<br>designed for life.</h2>
+        <p style="color:rgba(255,255,255,.6);font-size:15px;line-height:1.7">MEDQORIN is born from a simple belief — no patient should miss their medicine because of forgetfulness or inaccessibility.</p>
+        <div style="display:flex;gap:16px;margin-top:28px;flex-wrap:wrap">
+          <div style="text-align:center;padding:16px 20px;background:rgba(255,255,255,.05);border-radius:var(--radius-sm)"><div style="font-size:28px;font-weight:800;color:white;font-family:'Syne',sans-serif">98%</div><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">Adherence Rate</div></div>
+          <div style="text-align:center;padding:16px 20px;background:rgba(255,255,255,.05);border-radius:var(--radius-sm)"><div style="font-size:28px;font-weight:800;color:white;font-family:'Syne',sans-serif">8</div><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">Compartments</div></div>
+          <div style="text-align:center;padding:16px 20px;background:rgba(255,255,255,.05);border-radius:var(--radius-sm)"><div style="font-size:28px;font-weight:800;color:white;font-family:'Syne',sans-serif">24/7</div><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">Monitoring</div></div>
+        </div>
+      </div>
+      <div class="founder-card">
+        <div class="founder-avatar">S</div>
+        <div style="color:white;font-size:22px;font-weight:700;margin-bottom:4px">S. Surya</div>
+        <div style="color:var(--accent);font-size:13px;font-weight:600;margin-bottom:20px">Founder & CEO — MEDQORIN</div>
+        <div class="contact-item"><div class="contact-icon">📧</div>sundarajay26@gmail.com</div>
+        <div class="contact-item"><div class="contact-icon">📞</div>+91 9043083844</div>
+        <div class="contact-item"><div class="contact-icon">💼</div>LinkedIn: surya sundar</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">© 2025 MEDQORIN | Automated Medicine Allocator | Built with ❤️ in India</div>
+</div>
+
+<!-- ══════════════════════════════════════
+     LOGIN PAGE
+══════════════════════════════════════ -->
+<div class="page" id="page-login">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <div class="logo-icon">MQ</div>
+        <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px">MEDQORIN</span>
+      </div>
+      <h2 style="font-size:26px;margin-bottom:6px">Welcome back</h2>
+      <p style="color:var(--text2);font-size:14px;margin-bottom:28px">Sign in to your AMA dashboard</p>
+
+      <!-- Google -->
+      <button class="google-btn" onclick="loginGoogle()">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Continue with Google
+      </button>
+
+      <!-- Phone OTP -->
+      <button class="otp-btn" onclick="showPage('otp')">📱 Continue with Phone OTP</button>
+
+      <div class="divider"><span>or sign in with email</span></div>
+
+      <!-- Role -->
+      <div style="font-size:13px;font-weight:500;margin-bottom:8px">Sign in as</div>
+      <div class="role-select">
+        <div class="role-opt selected" id="lr-patient" onclick="selLoginRole('patient')">🧑 Patient</div>
+        <div class="role-opt" id="lr-caregiver" onclick="selLoginRole('caregiver')">👨‍⚕️ Caregiver</div>
+        <div class="role-opt" id="lr-admin" onclick="selLoginRole('admin')">🔐 Admin</div>
+      </div>
+
+      <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email"></div>
+      <div class="form-group pw-toggle">
+        <label>Password</label>
+        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+        <span class="pw-eye" onclick="togglePw('loginPass',this)">👁</span>
+      </div>
+      <div style="text-align:right;margin-bottom:20px"><a style="font-size:12px;color:var(--primary);cursor:pointer" onclick="showPage('forgot')">Forgot password?</a></div>
+
+      <button class="btn btn-primary btn-block" id="loginBtn" onclick="doEmailLogin()">Sign In</button>
+      <div class="auth-switch">Don't have an account? <a onclick="showPage('signup')">Sign up free</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SIGNUP PAGE
+══════════════════════════════════════ -->
+<div class="page" id="page-signup">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <div class="logo-icon">MQ</div>
+        <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px">MEDQORIN</span>
+      </div>
+      <h2 style="font-size:26px;margin-bottom:6px">Create account</h2>
+      <p style="color:var(--text2);font-size:14px;margin-bottom:28px">Join thousands managing their health smartly</p>
+
+      <button class="google-btn" onclick="loginGoogle()">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Sign up with Google
+      </button>
+      <div class="divider"><span>or create with email</span></div>
+
+      <div class="form-row-2">
+        <div class="form-group" style="margin-bottom:0"><label>First name</label><input id="signupFirst" placeholder="Arjun"></div>
+        <div class="form-group" style="margin-bottom:0"><label>Last name</label><input id="signupLast" placeholder="Kumar"></div>
+      </div>
+      <div class="form-group" style="margin-top:14px"><label>Email</label><input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email"></div>
+      <div class="form-group pw-toggle">
+        <label>Password <span style="font-size:11px;color:var(--text3)">(min 6 chars)</span></label>
+        <input type="password" id="signupPass" placeholder="••••••••" autocomplete="new-password">
+        <span class="pw-eye" onclick="togglePw('signupPass',this)">👁</span>
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label>I am a</label>
+        <select id="signupRole"><option value="patient">Patient</option><option value="caregiver">Caregiver</option><option value="admin">Admin</option></select>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="signupBtn" onclick="doSignup()">Create Account</button>
+      <div class="auth-switch">Already have an account? <a onclick="showPage('login')">Sign in</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     FORGOT PASSWORD
+══════════════════════════════════════ -->
+<div class="page" id="page-forgot">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo"><div class="logo-icon">MQ</div><span style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px">MEDQORIN</span></div>
+      <h2 style="font-size:26px;margin-bottom:6px">Reset password</h2>
+      <p style="color:var(--text2);font-size:14px;margin-bottom:28px">We'll send a reset link to your email</p>
+      <div class="form-group"><label>Email</label><input type="email" id="forgotEmail" placeholder="you@example.com"></div>
+      <button class="btn btn-primary btn-block" onclick="doForgot()">Send Reset Link</button>
+      <div class="auth-switch"><a onclick="showPage('login')">← Back to login</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PHONE OTP PAGE
+══════════════════════════════════════ -->
+<div class="page" id="page-otp">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo"><div class="logo-icon">MQ</div><span style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px">MEDQORIN</span></div>
+
+      <!-- Step 1: Enter phone -->
+      <div class="otp-step active" id="otpStep1">
+        <h2 style="font-size:26px;margin-bottom:6px">Phone Sign In</h2>
+        <p style="color:var(--text2);font-size:14px;margin-bottom:28px">Enter your mobile number to receive an OTP</p>
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="tel" id="otpPhone" placeholder="+91 9876543210">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="sendOTP()">Send OTP</button>
+        <div class="auth-switch"><a onclick="showPage('login')">← Back to login</a></div>
+      </div>
+
+      <!-- Step 2: Enter OTP -->
+      <div class="otp-step" id="otpStep2">
+        <h2 style="font-size:26px;margin-bottom:6px">Enter OTP</h2>
+        <p style="color:var(--text2);font-size:14px;margin-bottom:8px">Enter the 6-digit code sent to <strong id="otpPhoneDisplay"></strong></p>
+        <div class="otp-inputs">
+          <input type="tel" maxlength="1" id="o1" oninput="otpNext(this,'o2')">
+          <input type="tel" maxlength="1" id="o2" oninput="otpNext(this,'o3')">
+          <input type="tel" maxlength="1" id="o3" oninput="otpNext(this,'o4')">
+          <input type="tel" maxlength="1" id="o4" oninput="otpNext(this,'o5')">
+          <input type="tel" maxlength="1" id="o5" oninput="otpNext(this,'o6')">
+          <input type="tel" maxlength="1" id="o6" oninput="otpNext(this,null)">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="verifyOTP()">Verify & Sign In</button>
+        <div class="auth-switch" style="margin-top:12px"><a onclick="resendOTP()">Resend OTP</a> &nbsp;·&nbsp; <a onclick="showPage('login')">Cancel</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     DASHBOARD (PATIENT)
+══════════════════════════════════════ -->
+<div class="page" id="page-dashboard">
+  <div class="dash-wrap">
+    <div class="dash-header">
+      <div>
+        <div class="dash-greeting">Good morning, <span id="dashName">there</span> 👋</div>
+        <div class="dash-date" id="dashDate"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="showPage('caregiver')">👨‍⚕️ Caregiver View</button>
+        <button class="btn btn-primary" onclick="showPage('medications')">+ Add Medication</button>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card gr"><div class="lbl">Doses Today</div><div class="val" id="statDosesToday">—</div><div class="sub" id="statAdherence">loading...</div></div>
+      <div class="stat-card bl"><div class="lbl">Next Dose In</div><div class="val" id="statNextDose">—</div><div class="sub" id="statNextMed">—</div></div>
+      <div class="stat-card or"><div class="lbl">Low Stock</div><div class="val" id="statLowStock">—</div><div class="sub">compartments</div></div>
+      <div class="stat-card rd"><div class="lbl">Missed This Week</div><div class="val" id="statMissed">—</div><div class="sub" id="statMissedSub">loading...</div></div>
+    </div>
+    <div class="dash-main">
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div class="card">
+          <div class="card-title">Today's Schedule <span style="font-size:12px;color:var(--text3);font-weight:400" id="schedCount"></span></div>
+          <div id="scheduleList"><div class="empty-state"><div class="icon">💊</div><p>No medications scheduled. <a style="color:var(--primary);cursor:pointer" onclick="showPage('medications')">Add one →</a></p></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Recent Alerts</div>
+          <div id="alertsList">
+            <div class="alert-item success">✅ System connected to Supabase successfully</div>
+            <div class="alert-item info">📡 AMA Device connected — last sync just now</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div class="card">
+          <div class="card-title">AMA Device</div>
+          <div class="dev-status-row" style="margin-bottom:14px">
+            <div style="font-size:24px">📟</div>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600">AMA Standard v2</div><div style="font-size:12px;color:var(--accent);font-weight:500">● Connected via WiFi</div></div>
+          </div>
+          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Compartment Status</div>
+          <div class="mini-comps" id="dashCompartments">
+            <div class="mini-comp f">A1<br>85%</div><div class="mini-comp f">A2<br>70%</div>
+            <div class="mini-comp l">A3<br>20%</div><div class="mini-comp f">A4<br>90%</div>
+            <div class="mini-comp e">B1<br>—</div><div class="mini-comp f">B2<br>60%</div>
+            <div class="mini-comp f">B3<br>45%</div><div class="mini-comp e">B4<br>—</div>
+          </div>
+          <button class="dispense-btn" onclick="triggerDispense()">⚡ Dispense Next Dose</button>
+        </div>
+        <div class="card">
+          <div class="card-title">Weekly Adherence</div>
+          <div class="bar-wrap" id="weeklyChart">
+            <div class="bar-grp"><div class="bar" style="height:80%;background:var(--accent)"></div><div class="bar-lbl">Mon</div></div>
+            <div class="bar-grp"><div class="bar" style="height:100%;background:var(--accent)"></div><div class="bar-lbl">Tue</div></div>
+            <div class="bar-grp"><div class="bar" style="height:75%;background:var(--accent)"></div><div class="bar-lbl">Wed</div></div>
+            <div class="bar-grp"><div class="bar" style="height:100%;background:var(--accent)"></div><div class="bar-lbl">Thu</div></div>
+            <div class="bar-grp"><div class="bar" style="height:50%;background:var(--warn)"></div><div class="bar-lbl">Fri</div></div>
+            <div class="bar-grp"><div class="bar" style="height:100%;background:var(--accent)"></div><div class="bar-lbl">Sat</div></div>
+            <div class="bar-grp"><div class="bar" style="height:75%"></div><div class="bar-lbl">Sun</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     CAREGIVER PANEL
+══════════════════════════════════════ -->
+<div class="page" id="page-caregiver">
+  <div class="dash-wrap">
+    <div class="dash-header">
+      <div><div class="dash-greeting">Caregiver Panel 👨‍⚕️</div><div class="dash-date">Monitoring patients in real-time</div></div>
+      <button class="btn btn-outline" onclick="showPage('dashboard')">← Patient View</button>
+    </div>
+    <div class="care-grid">
+      <div class="pat-card"><div class="pat-hdr"><div class="pat-avatar">👴</div><div><div style="font-size:15px;font-weight:700">Ramesh Kumar</div><div style="font-size:11px;color:var(--text3)">ID: PAT-001</div></div></div><div style="font-size:12px;color:var(--text2);margin-bottom:6px">Adherence this week</div><div class="compliance-bar"><div class="comp-fill" style="width:92%"></div></div><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2)"><span>92%</span><span style="color:var(--accent)">✓ Excellent</span></div><div style="margin-top:10px;font-size:12px;color:var(--text3)">Last dose: 8:03 AM · Metformin</div></div>
+      <div class="pat-card"><div class="pat-hdr"><div class="pat-avatar">👵</div><div><div style="font-size:15px;font-weight:700">Kamala Devi</div><div style="font-size:11px;color:var(--text3)">ID: PAT-002</div></div></div><div style="font-size:12px;color:var(--text2);margin-bottom:6px">Adherence this week</div><div class="compliance-bar"><div class="comp-fill warn" style="width:65%"></div></div><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2)"><span>65%</span><span style="color:var(--warn)">⚠️ Monitor</span></div><div style="margin-top:10px;font-size:12px;color:var(--danger)">Missed: 12:00 PM dose yesterday</div></div>
+      <div class="pat-card"><div class="pat-hdr"><div class="pat-avatar">👦</div><div><div style="font-size:15px;font-weight:700" id="carePatName">Your Patient</div><div style="font-size:11px;color:var(--text3)">ID: PAT-003</div></div></div><div style="font-size:12px;color:var(--text2);margin-bottom:6px">Adherence this week</div><div class="compliance-bar"><div class="comp-fill" style="width:100%"></div></div><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2)"><span>100%</span><span style="color:var(--accent)">⭐ Perfect</span></div><div style="margin-top:10px;font-size:12px;color:var(--text3)" id="careLastDose">Last dose: loading...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Live Alerts — All Patients</div>
+      <div class="alert-item warn" style="margin-bottom:6px">⚠️ Kamala Devi — Missed 12:00 PM Amlodipine dose (yesterday)</div>
+      <div class="alert-item warn" style="margin-bottom:6px">⚠️ Ramesh Kumar — Compartment A3 low (20%) — please refill</div>
+      <div class="alert-item success" style="margin-bottom:6px">✅ All 3 morning doses taken on schedule today</div>
+      <div class="alert-item info">📡 All 3 AMA devices are online and connected</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MEDICATIONS
+══════════════════════════════════════ -->
+<div class="page" id="page-medications">
+  <div class="mgmt-wrap">
+    <div class="page-hdr"><div class="page-title">Medication Management</div><button class="btn btn-primary" onclick="toggleAddForm()">+ Add Medicine</button></div>
+    <div id="addMedForm" style="display:none;margin-bottom:24px">
+      <div class="card">
+        <h3 style="font-size:16px;margin-bottom:16px">Add New Medication</h3>
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0"><label>Medicine Name</label><input id="mName" placeholder="e.g. Metformin"></div>
+          <div class="form-group" style="margin-bottom:0"><label>Dosage</label><input id="mDosage" placeholder="e.g. 500mg"></div>
+          <div class="form-group" style="margin-bottom:0"><label>Compartment</label><select id="mComp"><option>A1</option><option>A2</option><option>A3</option><option>A4</option><option>B1</option><option>B2</option><option>B3</option><option>B4</option></select></div>
+        </div>
+        <div class="form-row" style="margin-top:14px">
+          <div class="form-group" style="margin-bottom:0"><label>Time 1</label><input type="time" id="mTime1" value="08:00"></div>
+          <div class="form-group" style="margin-bottom:0"><label>Time 2 (optional)</label><input type="time" id="mTime2"></div>
+          <div class="form-group" style="margin-bottom:0"><label>Frequency</label><select id="mFreq"><option>Once daily</option><option>Twice daily</option><option>Three times daily</option><option>As needed</option></select></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn btn-primary" onclick="saveMedication()">Save Medication</button>
+          <button class="btn btn-outline" onclick="toggleAddForm()">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Current Medications</div>
+      <div id="medTableWrap"><div class="empty-state"><div class="icon">💊</div><p>No medications added yet. Click "+ Add Medicine" to get started.</p></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     DEVICE
+══════════════════════════════════════ -->
+<div class="page" id="page-device">
+  <div class="dev-wrap">
+    <div class="page-hdr"><div class="page-title">Device Control Center</div><div class="status-badge" style="font-size:14px"><div class="status-dot" style="width:10px;height:10px"></div> AMA Online</div></div>
+    <div class="dev-grid">
+      <div class="dev-visual">
+        <div class="dev-body">
+          <div class="dev-screen">AMA v2.1<br>READY</div>
+          <div class="dev-slots"><div class="slot on"></div><div class="slot on"></div><div class="slot"></div><div class="slot on"></div><div class="slot"></div><div class="slot on"></div><div class="slot on"></div><div class="slot"></div></div>
+          <div class="dev-ind"></div>
+        </div>
+        <div class="dev-name">AMA Standard v2</div>
+        <div class="dev-sub">Serial: MQ-2024-0041 · WiFi Connected</div>
+      </div>
+      <div class="ctrl-panel">
+        <div class="ctrl-item">
+          <h3 style="font-size:15px;margin-bottom:12px">Device Controls</h3>
+          <div class="ctrl-row"><div class="ctrl-lbl">Auto-Dispense</div><div class="toggle" onclick="this.classList.toggle('off');showToast('🔄 Auto-dispense toggled')"></div></div>
+          <div class="ctrl-row"><div class="ctrl-lbl">WiFi Sync</div><div class="toggle" onclick="this.classList.toggle('off')"></div></div>
+          <div class="ctrl-row"><div class="ctrl-lbl">Buzzer Alert</div><div class="toggle" onclick="this.classList.toggle('off')"></div></div>
+          <div class="ctrl-row"><div class="ctrl-lbl">LED Indicators</div><div class="toggle" onclick="this.classList.toggle('off')"></div></div>
+        </div>
+        <div class="ctrl-item">
+          <h3 style="font-size:15px;margin-bottom:12px">Battery & Signal</h3>
+          <div class="ctrl-lbl" style="margin-bottom:6px">Battery Level</div>
+          <div class="prog-bar"><div class="prog-fill" style="width:78%"></div></div>
+          <div style="font-size:12px;color:var(--text2);margin:4px 0 16px">78% — Charging</div>
+          <div class="ctrl-lbl" style="margin-bottom:6px">Signal Strength</div>
+          <div class="prog-bar"><div class="prog-fill" style="width:92%"></div></div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">Excellent — 92%</div>
+        </div>
+        <div class="ctrl-item">
+          <h3 style="font-size:15px;margin-bottom:12px">Manual Actions</h3>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="triggerDispense()">⚡ Manual Dispense</button>
+            <button class="btn btn-outline" style="width:100%;justify-content:center" onclick="showToast('🔄 Calibration started...')">⚙️ Calibrate Device</button>
+            <button class="btn btn-outline" style="width:100%;justify-content:center" onclick="showToast('📡 Syncing...')">📡 Force Sync</button>
+            <button class="btn btn-danger" style="width:100%;justify-content:center;padding:8px" onclick="showToast('🔒 Device locked')">🔒 Lock Device</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     HISTORY (REAL DATA FROM SUPABASE)
+══════════════════════════════════════ -->
+<div class="page" id="page-history">
+  <div class="hist-wrap">
+    <div class="page-hdr">
+      <div class="page-title">History & Reports</div>
+      <button class="btn btn-primary" onclick="downloadReport()">⬇ Download Report</button>
+    </div>
+    <div class="hist-grid">
+      <div class="card">
+        <div class="card-title">7-Day Adherence</div>
+        <div class="bar-wrap" id="histChart">
+          <div style="text-align:center;width:100%;color:var(--text3);font-size:13px;padding:20px">Loading chart...</div>
+        </div>
+        <div style="display:flex;gap:14px;margin-top:12px">
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)"><div style="width:12px;height:12px;border-radius:3px;background:var(--accent)"></div>Taken</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)"><div style="width:12px;height:12px;border-radius:3px;background:var(--danger)"></div>Missed</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Monthly Summary</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px" id="monthlySummary">
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;text-align:center"><div style="font-size:28px;font-weight:800;color:var(--accent);font-family:'Syne',sans-serif" id="sumAdherence">—</div><div style="font-size:12px;color:var(--text2);margin-top:4px">Adherence</div></div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;text-align:center"><div style="font-size:28px;font-weight:800;color:var(--primary);font-family:'Syne',sans-serif" id="sumTaken">—</div><div style="font-size:12px;color:var(--text2);margin-top:4px">Doses Taken</div></div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;text-align:center"><div style="font-size:28px;font-weight:800;color:var(--danger);font-family:'Syne',sans-serif" id="sumMissed">—</div><div style="font-size:12px;color:var(--text2);margin-top:4px">Missed</div></div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;text-align:center"><div style="font-size:28px;font-weight:800;color:var(--warn);font-family:'Syne',sans-serif" id="sumMeds">—</div><div style="font-size:12px;color:var(--text2);margin-top:4px">Medications</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Medication Log <span style="font-size:12px;color:var(--text3);font-weight:400" id="logCount"></span></div>
+      <div id="logList"><div class="empty-state"><div class="icon">📋</div><p>Loading your dose history from Supabase...</p></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SHOP
+══════════════════════════════════════ -->
+<div class="page" id="page-shop">
+  <div class="shop-wrap">
+    <div class="page-hdr"><div><div class="page-title">Buy AMA Device</div><div style="font-size:13px;color:var(--text2);margin-top:4px">Smart automated medicine dispensers — made in India</div></div></div>
+    <div class="shop-layout">
+      <div>
+        <div class="prod-grid">
+          <div class="prod-card featured">
+            <div class="prod-img light">📟<div class="best-badge">⭐ Best Seller</div></div>
+            <div class="prod-body">
+              <div class="prod-name">AMA Standard</div>
+              <div class="prod-desc">8-compartment automated dispenser with WiFi, app control, voice alerts, and gesture authentication. Ideal for home use.</div>
+              <div class="prod-price">₹6,000 <span>/ device</span></div>
+              <div><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Color</div>
+                <div class="color-dots"><div class="cdot sel" style="background:#1A6FE8" onclick="selColor(this)"></div><div class="cdot" style="background:#1A2033" onclick="selColor(this)"></div><div class="cdot" style="background:#eee;border:1px solid #ccc" onclick="selColor(this)"></div><div class="cdot" style="background:#00C897" onclick="selColor(this)"></div></div>
+              </div>
+              <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="addToCart('AMA Standard',6000)">Add to Cart</button>
+            </div>
+          </div>
+          <div class="prod-card">
+            <div class="prod-img dark" style="color:white">🧳</div>
+            <div class="prod-body">
+              <div class="prod-name">AMA Mini (Travel)</div>
+              <div class="prod-desc">Compact 4-compartment travel version. Lightweight, battery-powered, Bluetooth-enabled. Perfect for on-the-go patients.</div>
+              <div class="prod-price">₹3,500 <span>/ device</span></div>
+              <div><div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Color</div>
+                <div class="color-dots"><div class="cdot sel" style="background:#1A2033" onclick="selColor(this)"></div><div class="cdot" style="background:#E24B4A" onclick="selColor(this)"></div><div class="cdot" style="background:#eee;border:1px solid #ccc" onclick="selColor(this)"></div></div>
+              </div>
+              <button class="btn btn-outline" style="width:100%;justify-content:center" onclick="addToCart('AMA Mini',3500)">Add to Cart</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cart-panel">
+        <div class="card-title">🛒 Cart</div>
+        <div id="cartItems"><div class="empty-state" style="padding:24px 0"><p>Cart is empty</p></div></div>
+        <div id="cartSummary"></div>
+        <button class="btn btn-accent" style="width:100%;justify-content:center;padding:14px;margin-top:16px;font-size:15px" onclick="checkout()">Checkout →</button>
+        <div style="text-align:center;font-size:11px;color:var(--text3);margin-top:8px">🔒 Secure · Free shipping over ₹5000</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PROFILE
+══════════════════════════════════════ -->
+<div class="page" id="page-profile">
+  <div class="prof-wrap">
+    <div class="prof-hero">
+      <div class="avatar" id="profAvatar">?</div>
+      <div style="flex:1">
+        <div style="font-size:24px;font-weight:700;margin-bottom:4px" id="profName">Loading...</div>
+        <div style="font-size:14px;opacity:.8;margin-bottom:8px" id="profEmail">—</div>
+        <div style="background:rgba(255,255,255,.2);padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block" id="profRole">Patient</div>
+      </div>
+      <button class="btn" style="background:rgba(255,255,255,.2);color:white" onclick="showToast('✏️ Profile editing — coming soon!')">Edit Profile</button>
+    </div>
+    <div class="prof-grid">
+      <div class="prof-section"><h3>Account Details</h3>
+        <div class="prof-field"><span class="fld-lbl">User ID</span><span class="fld-val" id="profId" style="font-size:11px;font-family:monospace">—</span></div>
+        <div class="prof-field"><span class="fld-lbl">Email</span><span class="fld-val" id="profEmailField">—</span></div>
+        <div class="prof-field"><span class="fld-lbl">Role</span><span class="fld-val" id="profRoleField">—</span></div>
+        <div class="prof-field"><span class="fld-lbl">Joined</span><span class="fld-val" id="profJoined">—</span></div>
+      </div>
+      <div class="prof-section"><h3>Emergency Contact</h3>
+        <div class="prof-field"><span class="fld-lbl">Name</span><span class="fld-val">Priya Kumar</span></div>
+        <div class="prof-field"><span class="fld-lbl">Relation</span><span class="fld-val">Spouse</span></div>
+        <div class="prof-field"><span class="fld-lbl">Phone</span><span class="fld-val">+91 98765 43211</span></div>
+      </div>
+      <div class="prof-section"><h3>Medical Notes</h3>
+        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;font-size:13px;color:var(--text2);line-height:1.7">Type 2 Diabetes — controlled.<br>Hypertension — on Lisinopril.<br>No known drug allergies.</div>
+      </div>
+      <div class="prof-section"><h3>Device Linked</h3>
+        <div class="prof-field"><span class="fld-lbl">Device</span><span class="fld-val">AMA Standard v2</span></div>
+        <div class="prof-field"><span class="fld-lbl">Serial</span><span class="fld-val">MQ-2024-0041</span></div>
+        <div class="prof-field"><span class="fld-lbl">Status</span><span class="fld-val" style="color:var(--accent)">● Active</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SETTINGS
+══════════════════════════════════════ -->
+<div class="page" id="page-settings">
+  <div class="sett-wrap">
+    <div class="page-hdr"><div class="page-title">Settings</div></div>
+    <div class="sett-section"><h3>Notifications</h3>
+      <div class="sett-row"><div><div class="sett-lbl">Dose Reminders</div><div class="sett-desc">Get notified 10 mins before each dose</div></div><div class="toggle" onclick="this.classList.toggle('off')"></div></div>
+      <div class="sett-row"><div><div class="sett-lbl">Missed Dose Alerts</div><div class="sett-desc">Alert when a dose is not taken within 30 mins</div></div><div class="toggle" onclick="this.classList.toggle('off')"></div></div>
+      <div class="sett-row"><div><div class="sett-lbl">Low Stock Alerts</div><div class="sett-desc">Notify when compartment falls below 25%</div></div><div class="toggle" onclick="this.classList.toggle('off')"></div></div>
+      <div class="sett-row"><div><div class="sett-lbl">Caregiver Notifications</div></div><div class="toggle" onclick="this.classList.toggle('off')"></div></div>
+      <div class="sett-row"><div><div class="sett-lbl">Voice Reminders</div></div><div class="toggle off" onclick="this.classList.toggle('off')"></div></div>
+    </div>
+    <div class="sett-section"><h3>Device Pairing</h3>
+      <div class="sett-row"><div><div class="sett-lbl">Connected Device</div><div class="sett-desc">AMA Standard v2 — MQ-2024-0041</div></div><span style="font-size:12px;font-weight:600;color:var(--accent)">● Connected</span></div>
+      <div class="sett-row"><div><div class="sett-lbl">Auto-connect on startup</div></div><div class="toggle" onclick="this.classList.toggle('off')"></div></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn btn-outline" onclick="showToast('🔍 Scanning for devices...')">Scan Devices</button>
+        <button class="btn btn-outline" onclick="showToast('🔌 Device unpaired')">Unpair</button>
+      </div>
+    </div>
+    <div class="sett-section"><h3>Account</h3>
+      <div class="sett-row"><div><div class="sett-lbl">Language</div></div>
+        <select style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-family:'DM Sans',sans-serif;font-size:13px"><option>English</option><option>Tamil</option><option>Hindi</option></select>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="doForgotFromSettings()">Change Password</button>
+        <button class="btn btn-danger" onclick="doLogout()">Logout</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════ -->
+<script>
+// ── SUPABASE INIT ──
+const { createClient } = supabase;
+const sb = createClient(
+  'https://bqwlwjtmrljtbveatdcg.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxd2x3anRtcmxqdGJ2ZWF0ZGNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDU4MDYsImV4cCI6MjA5MDUyMTgwNn0.rDqSwEMk1OX5jkgrkOYofxSezyyvTnnJbubdNv0VUfY'
+);
+
+// ── STATE ──
+let currentUser = null;
+let loginRole = 'patient';
+let cart = [];
+let timerSec = 9240;
+let otpPhoneVal = '';
+
+// ── TOAST ──
+function showToast(msg, duration=3000){
+  const t=document.getElementById('toast');
+  document.getElementById('toastMsg').textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), duration);
+}
+
+// ── LOADER ──
+function showLoader(){document.getElementById('globalLoader').classList.remove('hidden')}
+function hideLoader(){document.getElementById('globalLoader').classList.add('hidden')}
+
+// ── PAGE NAV ──
+const NAV_ITEMS = [
+  {id:'landing', label:'Home'},
+  {id:'dashboard', label:'Dashboard'},
+  {id:'medications', label:'Medications'},
+  {id:'device', label:'Device'},
+  {id:'history', label:'History'},
+  {id:'shop', label:'Shop'},
+  {id:'profile', label:'Profile'},
+  {id:'settings', label:'Settings'},
+];
+const AUTH_PAGES = ['login','signup','forgot','otp'];
+
+function showPage(p){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  const el = document.getElementById('page-'+p);
+  if(el) el.classList.add('active');
+
+  const isAuth = AUTH_PAGES.includes(p);
+  const nav = document.getElementById('mainNav');
+  nav.style.display = isAuth ? 'none' : '';
+
+  // Build nav tabs
+  const tabs = document.getElementById('navTabs');
+  tabs.innerHTML = NAV_ITEMS.map(n=>`<button class="nav-tab${n.id===p?' active':''}" onclick="showPage('${n.id}')">${n.label}</button>`).join('');
+
+  // Page-specific loaders
+  if(p==='dashboard') loadDashboard();
+  if(p==='history') loadHistory();
+  if(p==='medications') loadMedications();
+  if(p==='profile') loadProfile();
+  if(p==='caregiver') loadCaregiverLastDose();
+
+  window.scrollTo(0,0);
+}
+
+// ── AUTH STATE LISTENER ──
+sb.auth.onAuthStateChange(async (event, session) => {
+  hideLoader();
+  if(session && session.user){
+    currentUser = session.user;
+    updateUserPill();
+    if(AUTH_PAGES.includes(getCurrentPage())||getCurrentPage()==='landing'){
+      const role = session.user.user_metadata?.role || 'patient';
+      showPage(role === 'caregiver' ? 'caregiver' : 'dashboard');
+    }
+  } else {
+    currentUser = null;
+    showPage('landing');
+  }
+});
+
+function getCurrentPage(){
+  const el = document.querySelector('.page.active');
+  return el ? el.id.replace('page-','') : 'landing';
+}
+
+function updateUserPill(){
+  if(!currentUser) return;
+  const name = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'User';
+  const role = currentUser.user_metadata?.role || 'patient';
+  document.getElementById('userPill').textContent = `👤 ${name} · ${role}`;
+}
+
+// ── EMAIL LOGIN ──
+async function doEmailLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  if(!email||!pass){showToast('⚠️ Please fill email and password');return;}
+  const btn = document.getElementById('loginBtn');
+  btn.disabled=true; btn.textContent='Signing in...';
+  showLoader();
+  const {data, error} = await sb.auth.signInWithPassword({email, password:pass});
+  btn.disabled=false; btn.textContent='Sign In';
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  const role = data.user.user_metadata?.role || loginRole;
+  showToast('✅ Welcome back!');
+  showPage(role==='caregiver'?'caregiver':'dashboard');
+}
+
+// ── SIGNUP ──
+async function doSignup(){
+  const first = document.getElementById('signupFirst').value.trim();
+  const last  = document.getElementById('signupLast').value.trim();
+  const email = document.getElementById('signupEmail').value.trim();
+  const pass  = document.getElementById('signupPass').value;
+  const role  = document.getElementById('signupRole').value;
+  if(!first||!email||!pass){showToast('⚠️ Please fill all required fields');return;}
+  if(pass.length<6){showToast('⚠️ Password must be at least 6 characters');return;}
+  const btn=document.getElementById('signupBtn');
+  btn.disabled=true; btn.textContent='Creating account...';
+  showLoader();
+  const {data,error} = await sb.auth.signUp({
+    email, password:pass,
+    options:{data:{full_name:`${first} ${last}`.trim(), role}}
+  });
+  btn.disabled=false; btn.textContent='Create Account';
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  if(data.user && !data.session){
+    showToast('📧 Check your email to confirm your account!', 5000);
+    showPage('login');
+  } else {
+    showToast('✅ Account created! Welcome to MEDQORIN!');
+    showPage(role==='caregiver'?'caregiver':'dashboard');
+  }
+}
+
+// ── GOOGLE OAUTH ──
+async function loginGoogle(){
+  showLoader();
+  const {error} = await sb.auth.signInWithOAuth({
+    provider:'google',
+    options:{redirectTo: window.location.href}
+  });
+  if(error){hideLoader();showToast('❌ '+error.message);}
+}
+
+// ── PHONE OTP ──
+async function sendOTP(){
+  const phone = document.getElementById('otpPhone').value.trim();
+  if(!phone){showToast('⚠️ Enter your phone number');return;}
+  showLoader();
+  const {error} = await sb.auth.signInWithOtp({phone});
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  otpPhoneVal = phone;
+  document.getElementById('otpPhoneDisplay').textContent = phone;
+  document.getElementById('otpStep1').classList.remove('active');
+  document.getElementById('otpStep2').classList.add('active');
+  document.getElementById('o1').focus();
+  showToast('📱 OTP sent to '+phone);
+}
+
+async function verifyOTP(){
+  const token = ['o1','o2','o3','o4','o5','o6'].map(id=>document.getElementById(id).value).join('');
+  if(token.length<6){showToast('⚠️ Enter all 6 digits');return;}
+  showLoader();
+  const {data,error} = await sb.auth.verifyOtp({phone:otpPhoneVal, token, type:'sms'});
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  showToast('✅ Phone verified! Welcome!');
+  const role = data.user?.user_metadata?.role||'patient';
+  showPage(role==='caregiver'?'caregiver':'dashboard');
+}
+
+async function resendOTP(){
+  showLoader();
+  const {error} = await sb.auth.signInWithOtp({phone:otpPhoneVal});
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  showToast('📱 OTP resent!');
+}
+
+function otpNext(el, nextId){
+  if(el.value && nextId) document.getElementById(nextId).focus();
+}
+
+// ── FORGOT PASSWORD ──
+async function doForgot(){
+  const email = document.getElementById('forgotEmail').value.trim();
+  if(!email){showToast('⚠️ Enter your email');return;}
+  showLoader();
+  const {error} = await sb.auth.resetPasswordForEmail(email,{redirectTo:window.location.href});
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  showToast('📧 Password reset email sent!',4000);
+  showPage('login');
+}
+
+async function doForgotFromSettings(){
+  if(!currentUser){return;}
+  showLoader();
+  const {error} = await sb.auth.resetPasswordForEmail(currentUser.email,{redirectTo:window.location.href});
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  showToast('📧 Password reset email sent to '+currentUser.email);
+}
+
+// ── LOGOUT ──
+async function doLogout(){
+  await sb.auth.signOut();
+  currentUser=null;
+  cart=[];
+  showToast('👋 Logged out successfully');
+  showPage('landing');
+}
+
+// ── ROLE SELECT (LOGIN) ──
+function selLoginRole(r){
+  loginRole=r;
+  ['patient','caregiver','admin'].forEach(x=>{
+    document.getElementById('lr-'+x)?.classList.toggle('selected',x===r);
+  });
+}
+
+// ── PASSWORD TOGGLE ──
+function togglePw(id, el){
+  const inp=document.getElementById(id);
+  if(inp.type==='password'){inp.type='text';el.textContent='🙈';}
+  else{inp.type='password';el.textContent='👁';}
+}
+
+// ── DASHBOARD DATA ──
+async function loadDashboard(){
+  if(!currentUser){return;}
+  const name = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'there';
+  document.getElementById('dashName').textContent = name.split(' ')[0];
+  document.getElementById('dashDate').textContent = new Date().toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  // Load medications for schedule
+  const {data:meds} = await sb.from('medications').select('*').eq('user_id',currentUser.id).eq('is_active',true);
+  if(meds && meds.length>0){
+    renderSchedule(meds);
+    document.getElementById('schedCount').textContent = meds.length+' medications';
+    document.getElementById('statDosesToday').textContent = meds.length;
+    document.getElementById('statAdherence').textContent = 'scheduled today';
+  }
+
+  // Load dose logs for stats
+  const today = new Date().toISOString().split('T')[0];
+  const weekAgo = new Date(Date.now()-7*86400000).toISOString();
+  const {data:logs} = await sb.from('dose_logs').select('*').eq('user_id',currentUser.id).gte('created_at', weekAgo);
+  if(logs){
+    const missed = logs.filter(l=>l.status==='missed').length;
+    const taken  = logs.filter(l=>l.status==='taken').length;
+    document.getElementById('statMissed').textContent = missed;
+    document.getElementById('statMissedSub').textContent = missed===0?'🎉 Perfect week!':'this week';
+    document.getElementById('statLowStock').textContent = '1';
+
+    if(taken>0 && logs.length>0){
+      const pct = Math.round((taken/logs.length)*100);
+      document.getElementById('statAdherence').textContent = pct+'% adherence';
+    }
+  }
+}
+
+function renderSchedule(meds){
+  const colors = ['blue','green','orange','blue','green'];
+  const html = meds.map((m,i)=>`
+    <div class="med-item">
+      <div class="med-icon ${colors[i%colors.length]}">💊</div>
+      <div class="med-info">
+        <div class="med-name">${m.name} ${m.dosage||''}</div>
+        <div class="med-detail">Compartment ${m.compartment||'—'} · 1 tablet</div>
+      </div>
+      <div class="med-time">${(m.times&&m.times[0])||'—'}</div>
+      <div class="med-chk pending"></div>
+    </div>`).join('');
+  document.getElementById('scheduleList').innerHTML = html;
+}
+
+// ── MEDICATIONS ──
+async function loadMedications(){
+  if(!currentUser){return;}
+  const {data,error} = await sb.from('medications').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false});
+  const wrap = document.getElementById('medTableWrap');
+  if(error||!data||data.length===0){
+    wrap.innerHTML='<div class="empty-state"><div class="icon">💊</div><p>No medications yet. Add your first one above.</p></div>';
+    return;
+  }
+  wrap.innerHTML=`<table class="med-table">
+    <thead><tr><th>Medicine</th><th>Dosage</th><th>Compartment</th><th>Schedule</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>${data.map(m=>`
+      <tr>
+        <td><strong>${m.name}</strong></td>
+        <td>${m.dosage||'—'}</td>
+        <td>${m.compartment||'—'}</td>
+        <td>${(m.times||[]).join(' · ')||m.frequency||'—'}</td>
+        <td><span class="pill ${m.is_active?'green':'orange'}">${m.is_active?'Active':'Paused'}</span></td>
+        <td>
+          <button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="deleteMed('${m.id}')">Delete</button>
+        </td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+async function saveMedication(){
+  if(!currentUser){showToast('⚠️ Please login first');return;}
+  const name=document.getElementById('mName').value.trim();
+  const dosage=document.getElementById('mDosage').value.trim();
+  const comp=document.getElementById('mComp').value;
+  const t1=document.getElementById('mTime1').value;
+  const t2=document.getElementById('mTime2').value;
+  const freq=document.getElementById('mFreq').value;
+  if(!name){showToast('⚠️ Enter medicine name');return;}
+  const times = [t1, t2].filter(Boolean);
+  showLoader();
+  const {error} = await sb.from('medications').insert({
+    user_id:currentUser.id, name, dosage, compartment:comp, times, frequency:freq, is_active:true
+  });
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  showToast('💊 Medication saved!');
+  toggleAddForm();
+  loadMedications();
+}
+
+async function deleteMed(id){
+  if(!confirm('Remove this medication?'))return;
+  showLoader();
+  const {error} = await sb.from('medications').delete().eq('id',id);
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  showToast('🗑 Medication removed');
+  loadMedications();
+}
+
+function toggleAddForm(){
+  const f=document.getElementById('addMedForm');
+  f.style.display=f.style.display==='none'?'block':'none';
+}
+
+// ── HISTORY (REAL SUPABASE DATA) ──
+async function loadHistory(){
+  if(!currentUser){return;}
+  showLoader();
+
+  // Fetch dose logs
+  const {data:logs, error} = await sb
+    .from('dose_logs')
+    .select('*, medications(name, dosage, compartment)')
+    .eq('user_id', currentUser.id)
+    .order('created_at', {ascending:false})
+    .limit(50);
+
+  hideLoader();
+
+  const logList = document.getElementById('logList');
+  if(error){
+    logList.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>Error loading logs: ${error.message}<br><small>Make sure the dose_logs table exists in Supabase.</small></p></div>`;
+    renderEmptyHistChart();
+    return;
+  }
+
+  if(!logs||logs.length===0){
+    logList.innerHTML='<div class="empty-state"><div class="icon">📋</div><p>No dose history yet. Start taking medications to see logs here.</p></div>';
+    document.getElementById('logCount').textContent='0 entries';
+    renderEmptyHistChart();
+    updateMonthlySummary([]);
+    return;
+  }
+
+  // Render log entries
+  document.getElementById('logCount').textContent = logs.length+' entries';
+  logList.innerHTML = logs.map(log=>{
+    const medName = log.medications?.name||'Unknown Medicine';
+    const dosage  = log.medications?.dosage||'';
+    const comp    = log.medications?.compartment||'—';
+    const taken   = log.status==='taken';
+    const time    = new Date(log.created_at).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `<div class="log-entry">
+      <div class="log-icon" style="background:${taken?'#E6F9F2':'#FEECEC'}">${taken?'💊':'⚠️'}</div>
+      <div class="log-info">
+        <div class="log-name">${medName} ${dosage} — Compartment ${comp}</div>
+        <div class="log-time">${time}</div>
+      </div>
+      <div class="log-status" style="color:${taken?'var(--accent)':'var(--danger)'}">${taken?'✓ Taken':'✗ Missed'}</div>
+    </div>`;
+  }).join('');
+
+  // 7-day chart
+  renderHistChart(logs);
+  // Monthly summary
+  updateMonthlySummary(logs);
+}
+
+function renderHistChart(logs){
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const dayData = {};
+  const now = new Date();
+  for(let i=6;i>=0;i--){
+    const d=new Date(now); d.setDate(d.getDate()-i);
+    const key=d.toISOString().split('T')[0];
+    const dayName=days[d.getDay()===0?6:d.getDay()-1];
+    dayData[key]={label:dayName, taken:0, missed:0};
+  }
+  logs.forEach(l=>{
+    const key=l.created_at.split('T')[0];
+    if(dayData[key]){
+      if(l.status==='taken') dayData[key].taken++;
+      else if(l.status==='missed') dayData[key].missed++;
+    }
+  });
+  const vals = Object.values(dayData);
+  const maxTotal = Math.max(...vals.map(v=>v.taken+v.missed),1);
+  document.getElementById('histChart').innerHTML = vals.map(v=>{
+    const total=v.taken+v.missed;
+    const pct=total?Math.round((v.taken/total)*100):0;
+    const h=total?Math.max(Math.round((total/maxTotal)*100),8):8;
+    const color=pct>=80?'var(--accent)':pct>=50?'var(--warn)':'var(--danger)';
+    return `<div class="bar-grp"><div class="bar" style="height:${h}%;background:${color}" title="${v.taken} taken, ${v.missed} missed"></div><div class="bar-lbl">${v.label}</div></div>`;
+  }).join('');
+}
+
+function renderEmptyHistChart(){
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  document.getElementById('histChart').innerHTML = days.map(d=>`<div class="bar-grp"><div class="bar" style="height:8%;background:var(--border)"></div><div class="bar-lbl">${d}</div></div>`).join('');
+}
+
+function updateMonthlySummary(logs){
+  const monthAgo=new Date(); monthAgo.setDate(monthAgo.getDate()-30);
+  const recent=logs.filter(l=>new Date(l.created_at)>=monthAgo);
+  const taken=recent.filter(l=>l.status==='taken').length;
+  const missed=recent.filter(l=>l.status==='missed').length;
+  const total=taken+missed;
+  const pct=total?Math.round((taken/total)*100):0;
+  const meds=new Set(recent.map(l=>l.medication_id)).size;
+  document.getElementById('sumAdherence').textContent=total?pct+'%':'—';
+  document.getElementById('sumTaken').textContent=taken||'0';
+  document.getElementById('sumMissed').textContent=missed||'0';
+  document.getElementById('sumMeds').textContent=meds||'0';
+}
+
+// ── DOWNLOAD REPORT ──
+function downloadReport(){
+  if(!currentUser){showToast('⚠️ Login required');return;}
+  showToast('📄 Preparing report...');
+  // In production: generate CSV from dose_logs and trigger download
+  setTimeout(()=>{
+    const blob = new Blob(['MEDQORIN Dose Report\nGenerated: '+new Date().toLocaleString()+'\nUser: '+currentUser.email+'\n\nConnect to Supabase to export real data.'],{type:'text/plain'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='MEDQORIN_Report.txt'; a.click();
+    showToast('✅ Report downloaded!');
+  },500);
+}
+
+// ── PROFILE ──
+function loadProfile(){
+  if(!currentUser)return;
+  const name=currentUser.user_metadata?.full_name||currentUser.email?.split('@')[0]||'User';
+  const role=currentUser.user_metadata?.role||'patient';
+  const initials=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  const joined=new Date(currentUser.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('profAvatar').textContent=initials;
+  document.getElementById('profName').textContent=name;
+  document.getElementById('profEmail').textContent=currentUser.email;
+  document.getElementById('profRole').textContent=role.charAt(0).toUpperCase()+role.slice(1);
+  document.getElementById('profId').textContent=currentUser.id.slice(0,20)+'...';
+  document.getElementById('profEmailField').textContent=currentUser.email;
+  document.getElementById('profRoleField').textContent=role.charAt(0).toUpperCase()+role.slice(1);
+  document.getElementById('profJoined').textContent=joined;
+}
+
+// ── CAREGIVER LAST DOSE ──
+async function loadCaregiverLastDose(){
+  if(!currentUser)return;
+  const {data} = await sb.from('dose_logs').select('*, medications(name)').eq('user_id',currentUser.id).order('created_at',{ascending:false}).limit(1);
+  const name=currentUser.user_metadata?.full_name||'You';
+  document.getElementById('carePatName').textContent=name;
+  if(data&&data[0]){
+    const t=new Date(data[0].created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('careLastDose').textContent=`Last dose: ${t} · ${data[0].medications?.name||'—'}`;
+  }
+}
+
+// ── DISPENSE ──
+async function triggerDispense(){
+  if(!currentUser){showToast('⚠️ Login required');return;}
+  const btn=document.querySelector('.dispense-btn');
+  if(btn){btn.textContent='⏳ Dispensing...';btn.disabled=true;}
+
+  // Log a dispense event
+  const {data:meds} = await sb.from('medications').select('id').eq('user_id',currentUser.id).eq('is_active',true).limit(1);
+  if(meds&&meds[0]){
+    await sb.from('dose_logs').insert({
+      user_id:currentUser.id,
+      medication_id:meds[0].id,
+      status:'taken',
+      dispensed_by:'manual',
+      scheduled_time:new Date().toISOString(),
+      taken_at:new Date().toISOString()
+    });
+  }
+
+  setTimeout(()=>{
+    if(btn){btn.textContent='⚡ Dispense Next Dose';btn.disabled=false;}
+    showToast('💊 Dose dispensed & logged successfully!');
+  },1500);
+}
+
+// ── SHOP / CART ──
+function addToCart(name, price){
+  cart.push({name, price});
+  updateCartUI();
+  showToast('🛒 '+name+' added to cart!');
+}
+
+function updateCartUI(){
+  const el=document.getElementById('cartItems');
+  const sum=document.getElementById('cartSummary');
+  if(cart.length===0){
+    el.innerHTML='<div class="empty-state" style="padding:24px 0"><p>Cart is empty</p></div>';
+    sum.innerHTML='';return;
+  }
+  let total=0, html='';
+  cart.forEach((item,i)=>{
+    total+=item.price;
+    html+=`<div class="cart-item-row">
+      <div style="font-size:28px">📟</div>
+      <div style="flex:1;font-size:13px"><div style="font-weight:600">${item.name}</div><div style="color:var(--text2)">₹${item.price.toLocaleString()}</div></div>
+      <button onclick="cart.splice(${i},1);updateCartUI()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">×</button>
+    </div>`;
+  });
+  el.innerHTML=html;
+  sum.innerHTML=`<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px"><div class="cart-total-row"><span>Total</span><span>₹${total.toLocaleString()}</span></div><div style="font-size:12px;color:var(--accent);text-align:right;margin-top:4px">Free delivery included</div></div>`;
+}
+
+async function checkout(){
+  if(cart.length===0){showToast('🛒 Add items first');return;}
+  if(!currentUser){showToast('⚠️ Please login to checkout');showPage('login');return;}
+  showLoader();
+  const inserts = cart.map(item=>({user_id:currentUser.id,product_name:item.name,price:item.price,quantity:1,status:'pending'}));
+  const {error} = await sb.from('orders').insert(inserts);
+  hideLoader();
+  if(error){showToast('❌ '+error.message);return;}
+  cart=[];
+  updateCartUI();
+  showToast('🎉 Order placed! We\'ll contact you soon.');
+}
+
+function selColor(d){
+  d.closest('.color-dots').querySelectorAll('.cdot').forEach(x=>x.classList.remove('sel'));
+  d.classList.add('sel');
+}
+
+// ── TIMER ──
+function updateTimer(){
+  timerSec--;
+  if(timerSec<0)timerSec=9240;
+  const h=Math.floor(timerSec/3600),m=Math.floor((timerSec%3600)/60),s=timerSec%60;
+  const d=h>0?`${h}h ${String(m).padStart(2,'0')}m`:`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const el=document.getElementById('heroTimer');
+  if(el)el.textContent=d;
+  const dl=document.getElementById('dashTimer');
+  if(dl)dl.textContent=d;
+}
+setInterval(updateTimer,1000);
+
+// ── REAL-TIME: subscribe to dose_logs changes ──
+function startRealtimeSubscription(){
+  if(!currentUser)return;
+  sb.channel('dose-log-changes')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'dose_logs',filter:`user_id=eq.${currentUser.id}`},
+      (payload)=>{
+        showToast('🔔 New dose event recorded!');
+        if(getCurrentPage()==='history') loadHistory();
+        if(getCurrentPage()==='dashboard') loadDashboard();
+      })
+    .subscribe();
+}
+
+// ── BOOT ──
+// Check for OAuth redirect (Google login callback)
+(async()=>{
+  const hash = window.location.hash;
+  if(hash.includes('access_token')){
+    showLoader();
+    const {data,error} = await sb.auth.getSession();
+    if(data?.session){
+      currentUser=data.session.user;
+      updateUserPill();
+      startRealtimeSubscription();
+      const role=currentUser.user_metadata?.role||'patient';
+      showPage(role==='caregiver'?'caregiver':'dashboard');
+      window.history.replaceState(null,'',window.location.pathname);
+    }
+    hideLoader();
+    return;
+  }
+
+  // Check existing session
+  showLoader();
+  const {data} = await sb.auth.getSession();
+  if(data?.session){
+    currentUser=data.session.user;
+    updateUserPill();
+    startRealtimeSubscription();
+    const role=currentUser.user_metadata?.role||'patient';
+    showPage(role==='caregiver'?'caregiver':'dashboard');
+  } else {
+    showPage('landing');
+  }
+  hideLoader();
+})();
+</script>
+</body>
+</html>
